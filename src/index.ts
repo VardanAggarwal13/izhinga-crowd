@@ -15,6 +15,24 @@ process.on("uncaughtException", (err) => {
   console.error("[uncaughtException]", err);
 });
 
+// Fail fast and loud at boot, not confusingly on first real request. Without
+// these, EVERY auth call fails (JWT secrets) or every DB-backed feature
+// fails (Mongo — auth, festival calendar, POI anchors all depend on it) —
+// but the server would otherwise start "successfully" and look healthy
+// right up until someone's first login/request, making it look like a
+// caller-side problem rather than a deploy misconfiguration.
+const missingConfig = [
+  !env.auth.accessTokenSecret && "JWT_ACCESS_SECRET",
+  !env.auth.refreshTokenSecret && "JWT_REFRESH_SECRET",
+  !env.mongodb.uri && "MONGODB_URI",
+].filter((v): v is string => Boolean(v));
+
+if (missingConfig.length > 0) {
+  console.error(`FATAL: missing required environment variable(s): ${missingConfig.join(", ")}`);
+  console.error("The server will not start without these — see .env.example / DOCUMENTATION.md §5.");
+  process.exit(1);
+}
+
 const app = createServer();
 
 app.listen(env.port, () => {
