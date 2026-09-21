@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>iZhinga Crowd Intelligence — Demo</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #eef1f4;
+    --panel: #ffffff;
+    --border: #e4e8ec;
+    --text: #16202b;
+    --muted: #67727e;
+    --accent: #0f766e;
+    --accent-dark: #0b5c56;
+    --accent-soft: #e6f5f3;
+    --low: #16a34a;
+    --moderate: #ca8a04;
+    --high: #ea580c;
+    --very-high: #dc2626;
+    --danger-bg: #fef2f2;
+    --danger-text: #b91c1c;
+    --danger-border: #fecaca;
+    --calc-bg: #0b1626;
+    --calc-line: #24344a;
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 12px rgba(16, 24, 40, 0.06);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    background: linear-gradient(120deg, var(--accent-dark), var(--accent) 70%);
+    color: white;
+    padding: 22px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  header .logo {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.16);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px;
+    flex-shrink: 0;
+  }
+  header h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  header p { margin: 3px 0 0; font-size: 12.5px; opacity: 0.82; }
+  header code { background: rgba(255,255,255,0.15); padding: 1px 5px; border-radius: 4px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 20px;
+    padding: 22px;
+    max-width: 1440px;
+    margin: 0 auto;
+    align-items: start;
+  }
+  @media (max-width: 920px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 22px;
+  }
+  .panel.sticky { position: sticky; top: 22px; }
+
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-weight: 700;
+    margin: 0 0 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 5px;
+  }
+  .field .hint {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  .field input[type="text"],
+  .field input[type="number"],
+  .field select {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13.5px;
+    color: var(--text);
+    background: #fff;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field input:hover, .field select:hover { border-color: #c7ced6; }
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  fieldset {
+    border: 1px solid var(--border);
+    background: #fbfcfd;
+    border-radius: 9px;
+    margin: 0 0 14px;
+    padding: 12px 12px 4px;
+  }
+  fieldset legend {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent-dark);
+    padding: 0 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  button#submitBtn {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 13px;
+    border-radius: 9px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: background 0.15s, transform 0.1s;
+  }
+  button#submitBtn:hover:not(:disabled) { background: var(--accent-dark); }
+  button#submitBtn:active:not(:disabled) { transform: scale(0.99); }
+  button#submitBtn:disabled { background: #adb6be; cursor: not-allowed; }
+
+  .status-note {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 8px;
+    min-height: 16px;
+  }
+
+  /* --- Results --- */
+  .empty-state {
+    color: var(--muted);
+    font-size: 14px;
+    text-align: center;
+    padding: 70px 20px;
+  }
+  .empty-state .big-icon { font-size: 34px; margin-bottom: 10px; opacity: 0.6; }
+
+  #resultsContent { animation: fadeIn 0.35s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 11px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 0.01em;
+  }
+
+  .source-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #eef2f7;
+    color: #475569;
+    white-space: nowrap;
+  }
+  .source-tag.ai_estimated { background: #fff7ed; color: #9a3412; }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 760px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .stat-card {
+    background: #fafbfc;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 15px;
+  }
+  .stat-card .icon { font-size: 15px; margin-bottom: 6px; opacity: 0.75; }
+  .stat-card .label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  .stat-card .value { font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .stat-card .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .place-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .place-header .name { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+  .place-header .meta { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 26px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  th { font-size: 10.5px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em; font-weight: 700; }
+  tbody tr:hover { background: #fafbfc; }
+  tr:last-child td { border-bottom: none; }
+
+  .chart-wrap { position: relative; height: 260px; margin-bottom: 10px; }
+
+  .section-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  /* --- Formula breakdown --- */
+  .calc-card {
+    background: var(--calc-bg);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 26px;
+    color: #cbd5e1;
+  }
+  .calc-card .calc-title {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #93a4bb;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .calc-card .formula-string {
+    font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 12.5px;
+    color: #7dd3c8;
+    background: #0f2028;
+    padding: 8px 11px;
+    border-radius: 7px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .calc-rows { display: flex; flex-direction: column; }
+  .calc-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--calc-line);
+    font-size: 13px;
+  }
+  .calc-row .k { color: #93a4bb; }
+  .calc-row .v { font-family: "SF Mono", "Cascadia Code", Consolas, monospace; color: #e2e8f0; font-weight: 600; }
+  .calc-row .v .tag {
+    font-family: -apple-system, sans-serif;
+    font-size: 10px;
+    background: #1e3a37;
+    color: #6ee7d8;
+    padding: 1px 7px;
+    border-radius: 999px;
+    margin-left: 8px;
+    font-weight: 700;
+  }
+  .calc-row.total {
+    border-bottom: none;
+    border-top: 2px solid #34495f;
+    margin-top: 4px;
+    padding-top: 12px;
+    font-size: 14.5px;
+  }
+  .calc-row.total .k { color: #e2e8f0; font-weight: 700; }
+  .calc-row.total .v { color: #6ee7d8; font-size: 16px; }
+  .calc-row.range .v { color: #93a4bb; font-size: 12.5px; font-weight: 500; }
+
+  details.raw {
+    margin-top: 6px;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+  details.raw summary {
+    cursor: pointer;
+    font-size: 12.5px;
+    color: var(--muted);
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  details.raw pre {
+    background: #0f172a;
+    color: #cbd5e1;
+    padding: 15px;
+    border-radius: 9px;
+    font-size: 11.5px;
+    overflow: auto;
+    max-height: 400px;
+    margin-top: 10px;
+  }
+
+  .error-box {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    color: var(--danger-text);
+    padding: 15px 17px;
+    border-radius: 9px;
+    font-size: 13.5px;
+  }
+  .error-box strong { display: block; margin-bottom: 4px; font-size: 13.5px; }
+
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid #ffffff55;
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: -2px;
+    margin-right: 7px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  ::-webkit-scrollbar { height: 8px; width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #cbd3da; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🌐</div>
+  <div>
+    <h1>iZhinga Crowd Intelligence — Demo</h1>
+    <p>Reference UI for <code>POST /api/crowd/intelligence</code> · not the production frontend</p>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- FORM PANEL -->
+  <div class="panel sticky">
+    <h2>Request Parameters</h2>
+    <form id="requestForm">
+
+      <div class="field">
+        <label for="apiBaseUrl">API Base URL</label>
+        <input type="text" id="apiBaseUrl" value="http://localhost:3000" />
+      </div>
+
+      <div class="field">
+        <label for="placeId">Place ID</label>
+        <input type="text" id="placeId" placeholder="e.g. ChIJn_rZOjRlGTkRiEkP0aJj8tA" />
+        <div class="hint">Google's place_id for the POI — preferred, no search-ambiguity risk.</div>
+      </div>
+
+      <div class="field">
+        <label for="poiName">POI Name <span style="color:#6b7280;font-weight:normal;">(fallback, if no Place ID yet)</span></label>
+        <input type="text" id="poiName" placeholder="e.g. Golden Temple Amritsar" value="Golden Temple Amritsar" />
+        <div class="hint">Used only when Place ID above is empty — a free-text name/search string. One of the two fields is required.</div>
+      </div>
+
+      <div class="field">
+        <label for="city">City <span style="color:#dc2626">*</span></label>
+        <input type="text" id="city" placeholder="e.g. Amritsar" value="Amritsar" required />
+        <div class="hint">Required, even alongside a Place ID. Disambiguates chain names (Burger King, Starbucks, ...) that exist in many Indian cities, and drives the festival/event calendar lookup.</div>
+      </div>
+
+      <div class="field">
+        <label for="mdCategory">MD Category <span style="color:#dc2626">*</span></label>
+        <select id="mdCategory" required></select>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="dayOfWeek">Day of Week</label>
+          <select id="dayOfWeek">
+            <option value="">Auto-detect (today, IST)</option>
+          </select>
+          <div class="hint">Optional — omit it and the API auto-detects today's actual weekday.</div>
+        </div>
+        <div class="field">
+          <label for="selectedDay">Hourly View Day</label>
+          <select id="selectedDay">
+            <option value="">Same as Day of Week</option>
+          </select>
+        </div>
+      </div>
+
+      <fieldset id="manualFieldset" style="display:none;">
+        <legend>Manual Allotment (required)</legend>
+        <div class="field">
+          <label for="manualEngineCategory">Engine Formula</label>
+          <select id="manualEngineCategory">
+            <option value="religious_site">religious_site</option>
+            <option value="restaurant_cafe">restaurant_cafe</option>
+            <option value="market_shopping">market_shopping</option>
+            <option value="event_venue">event_venue</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="manualAnchor">Anchor / Capacity</label>
+          <input type="number" id="manualAnchor" placeholder="e.g. 5000" min="1" />
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Holiday / Festival</legend>
+        <div class="field">
+          <label for="holidayType">Type</label>
+          <select id="holidayType">
+            <option value="none">None (auto-detect from our calendar)</option>
+            <option value="long_weekend">Long weekend</option>
+            <option value="major_festival">Major festival</option>
+            <option value="extreme_event">Extreme event (e.g. Kumbh Mela)</option>
+          </select>
+          <div class="hint">Leave as "None" and today's actual holiday/festival (if any) is looked up from our own database for this POI's city — you almost never need to pick one yourself. Pick a specific type only to override.</div>
+        </div>
+        <div class="field" id="holidayIntensityField" style="display:none;">
+          <label for="holidayIntensity">Intensity (0 = low end of range, 1 = high end)</label>
+          <input type="number" id="holidayIntensity" min="0" max="1" step="0.1" placeholder="0.5" />
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Event at / near this POI</legend>
+        <div class="field">
+          <label for="eventType">Type</label>
+          <select id="eventType">
+            <option value="none">None (auto-detect from our calendar)</option>
+            <option value="local">Local event nearby</option>
+            <option value="poi_ceremony">POI ceremony (e.g. Aarti)</option>
+            <option value="city_wide">City-wide event</option>
+          </select>
+          <div class="hint">Leave as "None" and today's actual event (if any) is looked up from our own database — same auto-detection as Holiday above. Pick a specific type only to override.</div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Weather</legend>
+        <div class="field">
+          <label for="weatherType">Type</label>
+          <select id="weatherType">
+            <option value="">Auto-detect (live Google Weather API)</option>
+            <option value="pleasant">Pleasant / Sunny</option>
+            <option value="hot_humid">Hot / Humid</option>
+            <option value="heavy_rain">Heavy Rain / Storm</option>
+            <option value="extreme_heat">Extreme Heat (45°C+)</option>
+          </select>
+          <div class="hint">Leave as "Auto-detect" and current weather is pulled live from Google Weather for this POI's real coordinates. Pick a specific type only to override or to test without a Google Weather API key configured.</div>
+        </div>
+      </fieldset>
+
+      <div class="field">
+        <label for="anchorOverride">Anchor Override <span id="anchorOverrideLabelHint"></span></label>
+        <input type="number" id="anchorOverride" min="1" placeholder="leave blank for category default" />
+        <div class="hint" id="anchorOverrideHint"></div>
+      </div>
+
+      <button id="submitBtn" type="submit">Get Crowd Intelligence</button>
+      <div class="status-note" id="statusNote"></div>
+    </form>
+  </div>
+
+  <!-- RESULTS PANEL -->
+  <div class="panel" id="resultsPanel">
+    <h2>Result</h2>
+    <div class="empty-state" id="emptyState">
+      <div class="big-icon">📍</div>
+      Fill in the form and click <strong>Get Crowd Intelligence</strong>.<br />
+      Real requests take 15–30 seconds — a live browser is scraping Google Maps behind the scenes.
+    </div>
+    <div id="resultsContent" style="display:none;"></div>
+  </div>
+</div>
+
+<script>
+  const MD_CATEGORIES = [
+    "Eateries", "Food Market", "Stays", "Camps", "Shops", "Transport and Mobility",
+    "Religious Sites", "Historical Sites", "Museum", "Viewpoint", "Stadium", "Caves",
+    "Forts and Palaces", "Nature and Scenic Spot", "Lake", "Beaches",
+    "Culture and Art Tradition", "National Park and Zoo", "Experience_corridor",
+    "Vineyard", "Adventure Activities", "Family Kids Friendly Activities",
+    "Wellness and Spiritual Activities", "Local_life_experience", "Events_entertainment",
+    "Trek", "Photography & Content Creation", "NGO / Social_service",
+    "Not Created", "Manual Allotment",
+  ];
+  const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+  const mdCategorySelect = document.getElementById("mdCategory");
+  MD_CATEGORIES.forEach((c) => {
+    const opt = document.createElement("option");
+    opt.value = c;
+    opt.textContent = c;
+    mdCategorySelect.appendChild(opt);
+  });
+  mdCategorySelect.value = "Religious Sites";
+
+  const dayOfWeekSelect = document.getElementById("dayOfWeek");
+  const selectedDaySelect = document.getElementById("selectedDay");
+  DAYS.forEach((d) => {
+    const label = d[0].toUpperCase() + d.slice(1);
+    const opt1 = document.createElement("option");
+    opt1.value = d; opt1.textContent = label;
+    dayOfWeekSelect.appendChild(opt1);
+    const opt2 = document.createElement("option");
+    opt2.value = d; opt2.textContent = label;
+    selectedDaySelect.appendChild(opt2);
+  });
+  // Left on "Auto-detect" (empty value) by default — matches the API's own
+  // behavior of auto-detecting day_of_week when it's omitted.
+
+  // Categories where the anchor always means "peak simultaneous capacity" (a real
+  // physical ceiling — seats, venue capacity). Everything else uses "average daily
+  // footfall" instead — see DOCUMENTATION.md §13 for why this split exists.
+  const PEAK_CAPACITY_CATEGORIES = new Set(["Eateries", "Stadium", "Events_entertainment"]);
+
+  function updateAnchorOverrideHint() {
+    const category = mdCategorySelect.value;
+    const labelHint = document.getElementById("anchorOverrideLabelHint");
+    const hint = document.getElementById("anchorOverrideHint");
+    const input = document.getElementById("anchorOverride");
+
+    if (category === "Manual Allotment") {
+      labelHint.textContent = "";
+      hint.textContent = "Not used for Manual Allotment — set the anchor in the fieldset above instead.";
+      input.placeholder = "n/a — use Manual Allotment fields above";
+      return;
+    }
+    if (PEAK_CAPACITY_CATEGORIES.has(category)) {
+      labelHint.textContent = "(peak simultaneous capacity)";
+      hint.textContent = "How many people could be here at ONCE, at its absolute busiest — e.g. seats, venue capacity. This is a real physical ceiling for this category, in every endpoint. Leave blank and it's researched automatically for this specific POI (AI, cached 5 days) — see `calculation.anchor_source` in the response to see whether that happened.";
+      input.placeholder = "e.g. 400 (seats/capacity) — leave blank to auto-research";
+    } else {
+      labelHint.textContent = "(average daily footfall)";
+      hint.textContent = "How many people visit across the WHOLE DAY, total — not a simultaneous count. The system splits this across hours itself using Google's own busyness curve. See DOCUMENTATION.md §13. Leave blank and it's researched automatically for this specific POI (AI, cached 5 days) — see `calculation.anchor_source` in the response to see whether that happened.";
+      input.placeholder = "e.g. 12000 (visitors/day) — leave blank to auto-research";
+    }
+  }
+
+  mdCategorySelect.addEventListener("change", () => {
+    document.getElementById("manualFieldset").style.display =
+      mdCategorySelect.value === "Manual Allotment" ? "block" : "none";
+    updateAnchorOverrideHint();
+  });
+  updateAnchorOverrideHint();
+
+  const holidayTypeSelect = document.getElementById("holidayType");
+  holidayTypeSelect.addEventListener("change", () => {
+    document.getElementById("holidayIntensityField").style.display =
+      holidayTypeSelect.value === "none" ? "none" : "block";
+  });
+
+  let chartInstance = null;
+
+  function levelColor(level) {
+    switch (level) {
+      case "Low": return "#16a34a";
+      case "Moderate": return "#ca8a04";
+      case "High": return "#ea580c";
+      case "Very High": return "#dc2626";
+      default: return "#64748b";
+    }
+  }
+  function levelBadge(level) {
+    return `<span class="badge" style="background:${levelColor(level)}">${level}</span>`;
+  }
+  function fmtNum(n) {
+    return typeof n === "number" ? n.toLocaleString() : n;
+  }
+  function anchorSourceLabel(source) {
+    switch (source) {
+      case "override": return "your override";
+      case "manual": return "manual allotment";
+      case "ai_estimated": return "🤖 AI-estimated";
+      default: return "category default";
+    }
+  }
+
+  function renderError(title, detail) {
+    document.getElementById("emptyState").style.display = "none";
+    const content = document.getElementById("resultsContent");
+    content.style.display = "block";
+    content.innerHTML = `<div class="error-box"><strong>⚠️ ${title}</strong>${detail || ""}</div>`;
+  }
+
+  // Matches DAILY_FOOTFALL_CATEGORIES in src/formulas/crowdIntelligence.ts.
+  function anchorMeaningLabel(engineCategory) {
+    return engineCategory === "religious_site" || engineCategory === "market_shopping"
+      ? "daily footfall (whole day, total)"
+      : "peak simultaneous capacity";
+  }
+
+  function renderCalculation(calc) {
+    if (!calc) return "";
+    const multiplierRows = Object.entries(calc.multipliers_applied)
+      .map(([k, v]) => `
+        <div class="calc-row">
+          <span class="k">× ${k}</span>
+          <span class="v">${v}</span>
+        </div>`).join("");
+
+    return `
+      <div class="section-title">🧮 Formula Breakdown</div>
+      <div class="calc-card">
+        <div class="calc-title">Formula used (${calc.engine_category})</div>
+        <div class="formula-string">${calc.formula}</div>
+        <div class="calc-rows">
+          <div class="calc-row">
+            <span class="k">Anchor — ${anchorMeaningLabel(calc.engine_category)}</span>
+            <span class="v">${fmtNum(calc.anchor_used)}<span class="tag">${anchorSourceLabel(calc.anchor_source)}</span></span>
+          </div>
+          ${calc.anchor_source === "ai_estimated" && calc.anchor_estimate ? `
+          <div class="calc-row" style="font-size:12px;color:#6b7280;">
+            <span class="k">↳ Anchor confidence: ${Math.round(calc.anchor_estimate.confidence * 100)}%</span>
+            <span class="v" title="${(calc.anchor_estimate.caveats || []).join(' | ')}">${(calc.anchor_estimate.caveats || [])[0] || ''}</span>
+          </div>` : ''}
+          <div class="calc-row">
+            <span class="k">Score used (live busyness)</span>
+            <span class="v">${calc.score_used} / 100</span>
+          </div>
+          ${multiplierRows}
+          <div class="calc-row total">
+            <span class="k">= Estimated Midpoint</span>
+            <span class="v">${fmtNum(calc.estimated_midpoint)} visitors</span>
+          </div>
+          <div class="calc-row range">
+            <span class="k">Displayed range (±20%, per DOCUMENTATION.md §15.5)</span>
+            <span class="v">${fmtNum(calc.range.low)} – ${fmtNum(calc.range.high)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderResult(data) {
+    const ci = data.crowd_intelligence;
+    const place = data.place;
+    const calc = data.calculation;
+
+    document.getElementById("emptyState").style.display = "none";
+    const content = document.getElementById("resultsContent");
+    content.style.display = "block";
+
+    const sourceType = place?.data_source?.type || "google_scrape";
+    const sourceHtml = sourceType === "ai_estimated"
+      ? `<span class="source-tag ai_estimated">🤖 AI-estimated (confidence ${place.data_source.confidence ?? "?"})</span>`
+      : `<span class="source-tag">📍 Live Google data</span>`;
+
+    content.innerHTML = `
+      <div class="place-header">
+        <div>
+          <div class="name">${place?.name ?? "—"}</div>
+          <div class="meta">${place?.category ?? ""} · ${place?.address ?? ""}</div>
+        </div>
+        <div>${sourceHtml}</div>
+      </div>
+
+      <div class="summary-grid">
+        <div class="stat-card">
+          <div class="icon">📊</div>
+          <div class="label">Current Status</div>
+          <div class="value">${ci.current_status}</div>
+        </div>
+        <div class="stat-card">
+          <div class="icon">🚦</div>
+          <div class="label">Current Level</div>
+          <div class="value">${levelBadge(ci.current_level)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="icon">⏱️</div>
+          <div class="label">Est. Wait Time</div>
+          <div class="value">${ci.current_wait_time}</div>
+        </div>
+        <div class="stat-card">
+          <div class="icon">🕕</div>
+          <div class="label">Recommended Entry</div>
+          <div class="value">${ci.recommended_entry_slot.time}</div>
+          <div class="sub">${ci.recommended_entry_slot.reason}</div>
+        </div>
+      </div>
+
+      ${renderCalculation(calc)}
+
+      <div class="section-title">📅 Weekly Trend</div>
+      <table>
+        <thead><tr><th>Day</th><th>Overall Level</th><th>Peak Hours</th></tr></thead>
+        <tbody>
+          ${ci.weekly_trend.map(d => `
+            <tr>
+              <td>${d.day}</td>
+              <td>${levelBadge(d.overall_crowd_level)}</td>
+              <td>${d.peak_hours}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+
+      <div class="section-title">📈 Hourly Trend — ${ci.hourly_live_trend.selected_day}</div>
+      <div class="chart-wrap"><canvas id="hourlyChart"></canvas></div>
+
+      <details class="raw">
+        <summary>▸ Raw JSON response</summary>
+        <pre>${JSON.stringify(data, null, 2).replace(/</g, "&lt;")}</pre>
+      </details>
+    `;
+
+    const slots = ci.hourly_live_trend.time_slots;
+    const ctx = document.getElementById("hourlyChart");
+    if (chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: slots.map(s => s.time),
+        datasets: [{
+          label: "Visitor count",
+          data: slots.map(s => s.visitor_count),
+          backgroundColor: slots.map(s => levelColor(s.crowd_level)),
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              afterLabel: (item) => `Crowd score: ${slots[item.dataIndex].crowd_score}%`,
+            },
+          },
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (v) => v.toLocaleString() } },
+        },
+      },
+    });
+  }
+
+  document.getElementById("requestForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const apiBaseUrl = document.getElementById("apiBaseUrl").value.trim().replace(/\/$/, "");
+    const placeId = document.getElementById("placeId").value.trim();
+    const poiName = document.getElementById("poiName").value.trim();
+    const city = document.getElementById("city").value.trim();
+
+    if (!placeId && !poiName) {
+      renderError(
+        "Missing place identifier",
+        `<div style="margin-top:6px;">Enter either a Place ID or a POI Name before submitting.</div>`
+      );
+      return;
+    }
+    if (!city) {
+      renderError("Missing city", `<div style="margin-top:6px;">City is required — see the hint under the field.</div>`);
+      return;
+    }
+
+    const mdCategory = mdCategorySelect.value;
+    const dayOfWeek = dayOfWeekSelect.value || undefined;
+    const selectedDay = selectedDaySelect.value || undefined;
+    const holidayType = holidayTypeSelect.value;
+    const holidayIntensity = document.getElementById("holidayIntensity").value;
+    const eventType = document.getElementById("eventType").value;
+    const weatherType = document.getElementById("weatherType").value;
+    const anchorOverrideRaw = document.getElementById("anchorOverride").value;
+
+    const body = {
+      md_category: mdCategory,
+      city,
+    };
+    // Place ID takes priority when both are filled in — matches the API's own rule.
+    if (placeId) body.place_id = placeId;
+    else body.poi_name = poiName;
+    if (dayOfWeek) body.day_of_week = dayOfWeek;
+    if (selectedDay) body.selected_day = selectedDay;
+    if (holidayType !== "none") {
+      body.holiday = { type: holidayType };
+      if (holidayIntensity !== "") body.holiday.intensity = Number(holidayIntensity);
+    }
+    if (eventType !== "none") body.event = { type: eventType };
+    if (weatherType) body.weather = { type: weatherType };
+    if (anchorOverrideRaw !== "") body.anchor_override = Number(anchorOverrideRaw);
+
+    if (mdCategory === "Manual Allotment") {
+      const anchor = document.getElementById("manualAnchor").value;
+      body.manual = {
+        engineCategory: document.getElementById("manualEngineCategory").value,
+        anchor: anchor ? Number(anchor) : undefined,
+      };
+    }
+
+    const submitBtn = document.getElementById("submitBtn");
+    const statusNote = document.getElementById("statusNote");
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<span class="spinner"></span>Fetching live data (15-30s)…`;
+    statusNote.textContent = "Scraping Google Maps and running the formula engine…";
+
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/crowd/intelligence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        renderError(
+          `Request failed (${res.status}: ${json.reason || json.error || "error"})`,
+          `<div style="margin-top:6px;">${json.message || JSON.stringify(json)}</div>`
+        );
+      } else {
+        renderResult(json);
+      }
+    } catch (err) {
+      renderError(
+        "Could not reach the API",
+        `<div style="margin-top:6px;">${err.message}. Is the server running at the API Base URL above?</div>`
+      );
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Get Crowd Intelligence";
+      statusNote.textContent = "";
+    }
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,173 @@
+{
+  "info": {
+    "name": "iZhinga Crowd Intelligence API",
+    "description": "Google Maps popular-times scraper + MD-category crowd-calibration engine + dual-AI (OpenAI + Gemini) historical analysis.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [{ "key": "baseUrl", "value": "http://localhost:3000" }],
+  "item": [
+    {
+      "name": "Health check",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "Scrape a POI by name (raw, no formula)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/scrape",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"Sri Harmandir Sahib Golden Temple Amritsar\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Scrape a POI by place_id (raw, no formula)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/scrape",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"place_id\": \"ChIJn_rZOjRlGTkRiEkP0aJj8tA\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Crowd estimate - Religious Sites (score supplied)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/crowd/estimate",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mdCategory\": \"Religious Sites\",\n  \"score\": 75,\n  \"dayOfWeek\": \"saturday\",\n  \"holiday\": { \"type\": \"major_festival\", \"intensity\": 0.5 },\n  \"event\": { \"type\": \"poi_ceremony\" },\n  \"weather\": { \"type\": \"pleasant\", \"intensity\": 0 }\n}"
+        }
+      }
+    },
+    {
+      "name": "Crowd estimate - Eateries",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/crowd/estimate",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mdCategory\": \"Eateries\",\n  \"score\": 90,\n  \"dayOfWeek\": \"saturday\",\n  \"meal\": \"dinner\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Crowd estimate - Stadium (event_venue, no score needed)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/crowd/estimate",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mdCategory\": \"Stadium\",\n  \"dayOfWeek\": \"saturday\",\n  \"eventState\": { \"type\": \"event_night\" }\n}"
+        }
+      }
+    },
+    {
+      "name": "Crowd estimate - Manual Allotment (explicit override)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/crowd/estimate",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mdCategory\": \"Manual Allotment\",\n  \"score\": 50,\n  \"dayOfWeek\": \"monday\",\n  \"manual\": { \"engineCategory\": \"market_shopping\", \"anchor\": 1200 }\n}"
+        }
+      }
+    },
+    {
+      "name": "Crowd estimate - Not Created (expect 422 rejection)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/crowd/estimate",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mdCategory\": \"Not Created\",\n  \"score\": 50,\n  \"dayOfWeek\": \"monday\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Crowd LIVE - scrape + formula in one call (Religious Sites)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/crowd/live",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mdCategory\": \"Religious Sites\",\n  \"query\": \"Sri Harmandir Sahib Golden Temple Amritsar\",\n  \"dayOfWeek\": \"wednesday\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Crowd LIVE - Eateries example",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/crowd/live",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mdCategory\": \"Eateries\",\n  \"query\": \"Pehalwan Kulcha Amritsar\",\n  \"dayOfWeek\": \"saturday\",\n  \"meal\": \"dinner\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Crowd Intelligence - AI fallback demo (POI with no Google data)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/crowd/intelligence",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"place_id\": \"ChIJ_7iLxV5jGTkR3pjeGQDJAnc\",\n  \"md_category\": \"Eateries\",\n  \"day_of_week\": \"thursday\",\n  \"anchor_override\": 80\n}"
+        }
+      }
+    },
+    {
+      "name": "Crowd Intelligence - by place_id (frontend contract)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/crowd/intelligence",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"place_id\": \"ChIJn_rZOjRlGTkRiEkP0aJj8tA\",\n  \"md_category\": \"Religious Sites\",\n  \"day_of_week\": \"thursday\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Crowd Intelligence - with selected_day + context",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/crowd/intelligence",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"place_id\": \"ChIJn_rZOjRlGTkRiEkP0aJj8tA\",\n  \"md_category\": \"Religious Sites\",\n  \"day_of_week\": \"thursday\",\n  \"selected_day\": \"saturday\",\n  \"holiday\": { \"type\": \"major_festival\", \"intensity\": 0.5 }\n}"
+        }
+      }
+    },
+    {
+      "name": "Historical analysis (OpenAI + Gemini)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/historical",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"placeName\": \"Sri Harmandir Sahib (Golden Temple)\",\n  \"category\": \"Religious Sites\",\n  \"city\": \"Amritsar\"\n}"
+        }
+      }
+    }
+  ]
+}
