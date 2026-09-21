@@ -1,11 +1,13 @@
 import compression from "compression";
 import cors from "cors";
 import express from "express";
+import { authRouter } from "./routes/auth";
 import { crowdRouter } from "./routes/crowd";
 import { crowdIntelligenceRouter } from "./routes/crowdIntelligence";
 import { healthRouter } from "./routes/health";
 import { historicalRouter } from "./routes/historical";
 import { scrapeRouter } from "./routes/scrape";
+import { requireAuth } from "./requireAuth";
 
 export function createServer() {
   const app = express();
@@ -20,7 +22,14 @@ export function createServer() {
   app.use(compression());
   app.use(express.json());
 
+  // Unauthenticated on purpose: /health is a standard infra-monitoring
+  // convention, and /api/auth/* IS how a client gets credentials in the
+  // first place — requiring a token to get a token would be circular.
   app.use(healthRouter);
+  app.use(authRouter);
+
+  // Every real API route requires a valid access token from here down.
+  app.use(requireAuth);
   app.use(scrapeRouter);
   app.use(crowdRouter);
   app.use(crowdIntelligenceRouter);

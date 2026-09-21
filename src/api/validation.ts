@@ -122,3 +122,14 @@ export const historicalRequestSchema = z.object({
   category: z.string().optional(),
   city: z.string().optional(),
 });
+
+// --- Auth (see src/auth/) ---
+
+export const authTokenRequestSchema = z.object({
+  client_id: z.string().min(1, "client_id is required"),
+  client_secret: z.string().min(1, "client_secret is required"),
+});
+
+export const authRefreshRequestSchema = z.object({
+  refresh_token: z.string().min(1, "refresh_token is required"),
+});

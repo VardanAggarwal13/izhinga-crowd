@@ -385,6 +385,19 @@
         <input type="text" id="apiBaseUrl" value="http://localhost:3000" />
       </div>
 
+      <fieldset>
+        <legend>API Credentials <span style="color:#dc2626">*</span></legend>
+        <div class="field">
+          <label for="clientId">Client ID</label>
+          <input type="text" id="clientId" placeholder="e.g. e8f5e644-7417-4972-a9b9-34ad00fdde1b" />
+        </div>
+        <div class="field">
+          <label for="clientSecret">Client Secret</label>
+          <input type="password" id="clientSecret" placeholder="from npm run create:client" />
+        </div>
+        <div class="hint">Every real endpoint now requires authentication. Get a client_id/client_secret pair by running <code>npm run create:client "your-team-name"</code> on the backend. This form fetches a token automatically on first submit and reuses/refreshes it — you don't need to call the token endpoint yourself.</div>
+      </fieldset>
+
       <div class="field">
         <label for="placeId">Place ID</label>
         <input type="text" id="placeId" placeholder="e.g. ChIJn_rZOjRlGTkRiEkP0aJj8tA" />
@@ -523,6 +536,45 @@
     "Not Created", "Manual Allotment",
   ];
   const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+  // In-memory only (not localStorage) — deliberately lost on page reload,
+  // same lifetime as everything else on this reference-only demo page.
+  let authTokens = null; // { accessToken, refreshToken }
+
+  async function fetchTokenPair(apiBaseUrl) {
+    const clientId = document.getElementById("clientId").value.trim();
+    const clientSecret = document.getElementById("clientSecret").value.trim();
+    if (!clientId || !clientSecret) {
+      throw new Error("Enter Client ID and Client Secret above (see the hint under that field).");
+    }
+    const res = await fetch(`${apiBaseUrl}/api/auth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || "Failed to get an access token — check Client ID/Secret.");
+    return { accessToken: json.access_token, refreshToken: json.refresh_token };
+  }
+
+  async function refreshTokenPair(apiBaseUrl, refreshToken) {
+    const res = await fetch(`${apiBaseUrl}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    const json = await res.json();
+    if (!res.ok) return null; // refresh token itself expired/used — caller falls back to a fresh login
+    return { accessToken: json.access_token, refreshToken: json.refresh_token };
+  }
+
+  /** Gets a usable access token, fetching or refreshing as needed — the UI never has to think about tokens directly. */
+  async function getValidAccessToken(apiBaseUrl) {
+    if (!authTokens) {
+      authTokens = await fetchTokenPair(apiBaseUrl);
+    }
+    return authTokens.accessToken;
+  }
 
   const mdCategorySelect = document.getElementById("mdCategory");
   MD_CATEGORIES.forEach((c) => {
@@ -834,11 +886,26 @@
     statusNote.textContent = "Scraping Google Maps and running the formula engine…";
 
     try {
-      const res = await fetch(`${apiBaseUrl}/api/crowd/intelligence`, {
+      let accessToken = await getValidAccessToken(apiBaseUrl);
+      let res = await fetch(`${apiBaseUrl}/api/crowd/intelligence`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify(body),
       });
+
+      // Access token expired/invalid mid-session — refresh (or, if the
+      // refresh token itself is gone too, log in fresh) once and retry the
+      // same request exactly once before giving up.
+      if (res.status === 401) {
+        const refreshed = authTokens?.refreshToken ? await refreshTokenPair(apiBaseUrl, authTokens.refreshToken) : null;
+        authTokens = refreshed ?? (await fetchTokenPair(apiBaseUrl));
+        res = await fetch(`${apiBaseUrl}/api/crowd/intelligence`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${authTokens.accessToken}` },
+          body: JSON.stringify(body),
+        });
+      }
+
       const json = await res.json();
 
       if (!res.ok) {

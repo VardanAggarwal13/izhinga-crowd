@@ -55,6 +55,21 @@ export const env = {
     uri: optional("MONGODB_URI") || undefined,
     dbName: optional("MONGODB_DB_NAME", "izhinga"),
   },
+
+  // API authentication (see src/auth/) — client_id/client_secret ->
+  // short-lived access JWT + rotating 7-day refresh JWT. Deliberately two
+  // DIFFERENT secrets (not one shared secret) so a leaked access-token
+  // secret can't be used to forge refresh tokens or vice versa. No
+  // fallback default on purpose — an auth secret with a baked-in default
+  // is a real vulnerability if someone forgets to set it in production;
+  // src/auth/tokens.ts throws clearly at first use instead.
+  auth: {
+    accessTokenSecret: optional("JWT_ACCESS_SECRET") || undefined,
+    refreshTokenSecret: optional("JWT_REFRESH_SECRET") || undefined,
+    accessTokenTtl: optional("JWT_ACCESS_TTL", "1h"),
+    refreshTokenTtl: optional("JWT_REFRESH_TTL", "7d"),
+    refreshTokenTtlMs: 7 * 24 * 60 * 60 * 1000,
+  },
 };
 
 export function assertAiKeysConfigured(): { openai: boolean; gemini: boolean } {
