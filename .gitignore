@@ -6,3 +6,4 @@ dist/
 playwright-report/
 test-results/
 poi-seed-data/
+vendor-build/

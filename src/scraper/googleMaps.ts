@@ -114,19 +114,34 @@ function parseLatLngFromUrl(url: string): { lat: number | null; lng: number | nu
 async function extractLiveStatus(
   page: Page
 ): Promise<{ text: string | null; score: number | null }> {
-  const text = await page
-    .evaluate((phrases) => {
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-      let node: Node | null;
-      while ((node = walker.nextNode())) {
-        const t = node.textContent?.trim();
-        if (t && phrases.some((p) => t.toLowerCase() === p.toLowerCase())) {
-          return t;
-        }
+  // This callback is Playwright's page.evaluate() — its SOURCE TEXT gets
+  // serialized and executed inside the browser's isolated page context, a
+  // completely separate JS realm from this Node process. Any obfuscator
+  // transform that relies on a shared helper defined in the outer scope
+  // (the string-array decoder, control-flow-flattening's dispatcher, etc.)
+  // breaks here with a ReferenceError, since that helper doesn't exist in
+  // the browser context — confirmed live when building the obfuscated
+  // vendor bundle (see scripts/buildVendor.js). The directive comments
+  // below are no-ops everywhere except the obfuscator step — tagged
+  // @preserve so esbuild's bundler (which strips ordinary comments) keeps
+  // them too, or the obfuscator would never even see them. Deliberately a
+  // standalone statement, not chained off `page` — confirmed live that
+  // esbuild only reliably preserves @preserve comments attached to a
+  // statement/declaration, not ones sitting mid-method-chain.
+  // @preserve javascript-obfuscator:disable
+  const evaluatePromise = page.evaluate((phrases) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const t = node.textContent?.trim();
+      if (t && phrases.some((p) => t.toLowerCase() === p.toLowerCase())) {
+        return t;
       }
-      return null;
-    }, LIVE_STATUS_PHRASES)
-    .catch(() => null);
+    }
+    return null;
+  }, LIVE_STATUS_PHRASES);
+  // @preserve javascript-obfuscator:enable
+  const text = await evaluatePromise.catch(() => null);
 
   if (!text) return { text: null, score: null };
   return { text, score: estimateScoreFromLiveStatusText(text) };
@@ -149,9 +164,12 @@ function emptyWeek(): PopularTimesByDay {
 }
 
 async function extractPopularTimesByDay(page: Page): Promise<PopularTimesByDay> {
+  // @preserve javascript-obfuscator:disable — see extractLiveStatus's comment above;
+  // $$eval's callback is serialized into the browser's isolated page context too.
   const barLabels = await page.$$eval(SELECTORS.busyBar, (nodes) =>
     nodes.map((node) => node.getAttribute("aria-label") ?? "")
   );
+  // @preserve javascript-obfuscator:enable
   if (barLabels.length === 0 || barLabels.length % 7 !== 0) {
     // Not the expected "7 equal day-blocks" shape (e.g. no data at all, or
     // Google changed the widget) — safest to return nothing rather than
@@ -199,9 +217,11 @@ async function warnIfDayOrderAssumptionBroke(page: Page, blockCount: number): Pr
   const expectedIndex = WEEK_ORDER.indexOf(expectedDay as DayOfWeek);
   if (expectedIndex === -1) return;
 
+  // @preserve javascript-obfuscator:disable — see extractLiveStatus's comment above.
   const visibility = await page.$$eval(SELECTORS.busyBar, (nodes) =>
     nodes.map((n) => (n as HTMLElement).offsetParent !== null)
   );
+  // @preserve javascript-obfuscator:enable
   const blockSize = visibility.length / 7;
   if (!Number.isInteger(blockSize)) return;
 

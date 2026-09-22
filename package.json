@@ -12,7 +12,8 @@
     "playwright:install": "playwright install --with-deps chromium",
     "seed:calendar": "tsx src/db/seedCalendar.ts",
     "seed:anchors": "tsx src/db/seedPoiAnchors.ts",
-    "create:client": "tsx src/db/createApiClient.ts"
+    "create:client": "tsx src/db/createApiClient.ts",
+    "build:vendor": "node scripts/buildVendor.js"
   },
   "engines": {
     "node": ">=20"
@@ -37,6 +38,8 @@
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.9.0",
+    "esbuild": "^0.28.2",
+    "javascript-obfuscator": "^5.8.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }
