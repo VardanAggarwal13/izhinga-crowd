@@ -57,7 +57,11 @@ crowdRouter.post(
       return;
     }
 
-    res.json(outcome);
+    // `formulaUsed` (the internal per-category math as a string) deliberately
+    // left out of this externally-sold response — same reasoning as
+    // crowdIntelligence.ts's `calculation.formula`.
+    const { formulaUsed: _formulaUsed, ...outcomeForResponse } = outcome;
+    res.json(outcomeForResponse);
   })
 );
 
@@ -95,12 +99,34 @@ crowdRouter.post(
       // outlet is meant (see DOCUMENTATION.md).
       scraped = await scrapePoi(`${body.query}, ${body.city}`);
     } catch (err) {
-      res.status(502).json({
-        error: "scrape_failed",
-        message: "Failed to scrape Google Maps for this query",
-        detail: err instanceof Error ? err.message : String(err),
-      });
-      return;
+      // Total scrape failure (Google blocked us, network blip, page didn't
+      // resolve) — unlike /api/crowd/intelligence's place_id path, this
+      // route always has a human-readable `query`, so the AI fallback below
+      // (same one used for "resolved but no Popular Times") can always run
+      // off a synthetic stub instead of failing outright. See
+      // crowdIntelligence.ts for the fuller version of this same reasoning.
+      scraped = {
+        query: `${body.query}, ${body.city}`,
+        placeId: null,
+        url: "",
+        lat: null,
+        lng: null,
+        category: null,
+        address: null,
+        liveStatusText: null,
+        liveScore: null,
+        popularTimesByDay: {
+          sunday: [],
+          monday: [],
+          tuesday: [],
+          wednesday: [],
+          thursday: [],
+          friday: [],
+          saturday: [],
+        },
+        placeName: body.query,
+        scrapedAt: new Date().toISOString(),
+      };
     }
 
     // Resolved once, up front — the AI-fallback score lookup below indexes
@@ -109,7 +135,8 @@ crowdRouter.post(
     const dayOfWeek = body.dayOfWeek ?? autoDetectDayOfWeek();
 
     let score = scraped.liveScore ?? undefined;
-    let aiFallback: { providersUsed: string[]; confidence: number; caveats: string[] } | null = null;
+    // providersUsed left out — same reasoning as crowdIntelligence.ts's data_source.
+    let aiFallback: { confidence: number; caveats: string[] } | null = null;
 
     if (score === undefined && needsScore(body.mdCategory, body.manual)) {
       const estimate = await estimateCrowdPatternWithAi({
@@ -121,7 +148,6 @@ crowdRouter.post(
       if (estimate) {
         score = averageOpenHoursScore(estimate.popularTimesByDay[dayOfWeek]);
         aiFallback = {
-          providersUsed: estimate.providersUsed,
           confidence: estimate.confidence,
           caveats: estimate.caveats,
         };
@@ -165,9 +191,10 @@ crowdRouter.post(
       return;
     }
 
+    const { formulaUsed: _formulaUsed, ...estimateForResponse } = outcome;
     res.json({
       scraped,
-      estimate: outcome,
+      estimate: estimateForResponse,
       data_source: aiFallback ? { type: "ai_estimated", ...aiFallback } : { type: "google_scrape" },
     });
   })

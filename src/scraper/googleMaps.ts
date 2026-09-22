@@ -502,7 +502,16 @@ async function scrapePoiByPlaceIdUncached(
     // check is trivially true immediately after goto() and never actually
     // detects the failure case (confirmed live: that bug let this whole
     // check get skipped and fall through to the old 50s+ hang).
-    const REDIRECT_WAIT_MS = Math.min(timeoutMs, 5_000);
+    //
+    // Was 5s — confirmed live that's too tight and flaky: the SAME valid
+    // place_id (a real CID that resolves fine on retry) intermittently threw
+    // this "did not resolve" error under slower network/server conditions
+    // (reproduced consistently on a remote AWS deploy, intermittently even
+    // on localhost) simply because Google's client-side redirect hadn't
+    // landed yet at the 5s mark. Bumped to 12s — still well under the 20s
+    // default overall timeout, so a genuinely invalid ID still fails
+    // reasonably fast, but gives real redirects enough room to land first.
+    const REDIRECT_WAIT_MS = Math.min(timeoutMs, 12_000);
     if (!PLACE_PAGE_URL_RE.test(page.url())) {
       await page.waitForURL(PLACE_PAGE_URL_RE, { timeout: REDIRECT_WAIT_MS }).catch(() => {});
     }
