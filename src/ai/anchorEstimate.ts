@@ -23,8 +23,6 @@ import { generateWithOpenAI } from "./providers/openai";
  * double-counting it once D_holiday/D_weekend/D_event apply on top.
  */
 
-const MIN_CONFIDENCE = 0.3;
-
 export interface AiEstimatedAnchor {
   value: number;
   confidence: number;
@@ -56,39 +54,46 @@ function buildAnchorPrompt(
     .filter(Boolean)
     .join("\n");
 
-  return `You are a venue-scale research analyst. Estimate ${metricDescription(isDailyFootfall)} for a
-specific real place. You have live web search available — use it.
+  return `You are a venue-scale research analyst. Research and estimate ${metricDescription(isDailyFootfall)}
+for a specific real place. You have live web search available — use it ACTIVELY and THOROUGHLY.
 
 ${context}
 
-Search for and weigh signals like these, in roughly this priority order:
-1. An official capacity/seating figure — venue website, booking platform listing, tourism board,
-   Wikipedia (for larger/well-known venues).
-2. Indirect size signals — review volume, price tier, whether it's described as "small/intimate"
-   vs. "large", photos of the space, typical queue/wait-time mentions.
-3. Comparable venues of the same type and rough size in the same city, if nothing specific to
-   this exact place turns up — and say so explicitly in "caveats" when you do this.
+RESEARCH STRATEGY (in priority order):
+1. OFFICIAL sources: venue's own website, Wikipedia, tourism boards, government sites (especially for
+   temples/shrines/govt facilities), published annual reports, booking platforms (e.g. ticketing sites
+   showing capacity).
+2. VISITOR STATISTICS: news articles about visitor counts, academic papers on tourism, Tripadvisor/
+   Google reviews mentioning volumes/crowds, pilgrim/visitor countss.
+3. PHYSICAL CAPACITY: seating counts, building layouts, fire code limits, architectural specs if
+   available.
+4. COMPARABLE VENUES: if this exact place has no data, find similar venues (same category, same city,
+   similar size/tier) and report their figures + explain the comparison in caveats.
+5. LOCAL CONTEXT: city population, region's tourist density, local economic size — helps calibrate
+   expectations.
 
-CRITICAL — give the STABLE, TYPICAL figure for an ordinary day. Do NOT inflate this number
-because of any festival, holiday, weekend, or special event happening around today's date — this
-system applies those effects SEPARATELY as multipliers on top of your number, so baking a surge
-into your estimate here would double-count it. If your search surfaces festival-specific crowd
-figures, treat that as context for what NOT to report, not as the answer.
+CRITICAL — give the STABLE, TYPICAL figure for an ordinary day:
+- NOT peak festival figures (ignore Durga Puja spikes, Diwali surges, etc.)
+- NOT weekend-specific or weekend averages — give the annualized typical day
+- NOT "capacity when fully booked" — give realistic occupancy/throughput
+- This system applies surge multipliers separately, so a raw stable number only.
 
 Respond with ONLY a single JSON object (no markdown fences, no commentary):
 {
-  "low": number | null,        // low end of a plausible range, if you're estimating a range
-  "high": number | null,       // high end of a plausible range, if you're estimating a range
-  "estimate": number | null,   // your single best-guess number
+  "low": number | null,        // low end of plausible range for typical day
+  "high": number | null,       // high end of plausible range for typical day
+  "estimate": number | null,   // your best single-point guess for typical day
   "confidence": number,        // 0-1 — see calibration below
-  "caveats": string[]          // e.g. "no official figure found, reasoned from review volume and category norms"
+  "caveats": string[]          // e.g., "extrapolated from annual visitor data", "based on similar temples"
 }
 
 Confidence calibration:
-- 0.8-1.0: a stated official figure (capacity listing, published visitor stats).
-- 0.5-0.8: solid indirect signal (review volume + size description + comparable venues).
-- 0.2-0.5: little direct signal — mostly reasoned from category/city norms.
-- Below 0.2: essentially guessing with no real grounding — still give a number, but say so plainly.`;
+- 0.9-1.0: explicit official figure (published visitor count, stated capacity)
+- 0.7-0.9: solid cross-checked data (multiple news sources, booking platform specs)
+- 0.5-0.7: reasonable inference (review volume, physical size, local context)
+- 0.3-0.5: moderate reasoning (comparable venues, category norms)
+- 0.15-0.3: low confidence but a committed guess based on any available signal
+- Below 0.15: abandon the guess — this would just add noise`;
 }
 
 function buildFollowUpPrompt(
@@ -101,9 +106,16 @@ function buildFollowUpPrompt(
   const place = `${placeName} (${mdCategoryLabel}${city ? `, ${city}` : ""})`;
 
   return `Your previous attempt to estimate ${place}'s ${metric} did not include a usable number.
-You MUST provide a specific numeric estimate this time — do not leave "estimate" null. Even under
-high uncertainty, commit to your single best reasoned guess and reflect the uncertainty honestly
-via a low "confidence" value and clear "caveats", not by omitting the number.
+You MUST provide a specific numeric estimate this time — do not leave "estimate" null.
+
+Even under high uncertainty, commit to your single best reasoned guess. Reflect the uncertainty
+honestly via a lower "confidence" value and clear "caveats" — not by omitting the estimate.
+
+FALLBACK reasoning if you have no direct data:
+- Extract population of ${city || "the city"} (if available)
+- Estimate what % might visit this type of venue daily
+- Use comparable successful venues of the same type as anchors
+- A guess grounded in ANY available signal + honest uncertainty is better than null
 
 Respond with ONLY the same JSON shape as before:
 { "low": number | null, "high": number | null, "estimate": number, "confidence": number, "caveats": string[] }`;
@@ -147,13 +159,23 @@ function parseAnchorResponse(raw: string): ParsedAnchor | null {
 }
 
 /**
- * Auto-estimates `anchorOverride` for a POI when the caller omits it. Never
- * throws: any failure (unknown category, no OpenAI key, both attempts
- * unparseable, confidence below MIN_CONFIDENCE, DB hiccup) returns null —
- * callers fall through to the existing category default, same as before
- * this existed. `city` is required — matching against `poi_anchor_estimates`
- * needs it (see normalizePoiKey), and every caller already has it (required
- * on both scrape-backed routes — see DOCUMENTATION.md).
+ * Auto-estimates `anchorOverride` for a POI when the caller omits it. This is
+ * an on-demand, dynamic research system:
+ *
+ * 1. Check database first (any pre-seeded or previously-researched POI)
+ * 2. If missing, call AI to research the POI's actual daily footfall/capacity
+ * 3. Save the result to database immediately (for future lookups)
+ * 4. Return the value to the caller
+ *
+ * The fallback to category default (e.g. 100,000 for religious sites) only
+ * happens if ALL three tiers fail — never use a generic default when we can
+ * research the specific POI's actual data.
+ *
+ * Never throws: any failure (unknown category, no OpenAI key, unparseable)
+ * returns null — callers fall through to the existing category default, same
+ * as before this existed. `city` is required — matching against
+ * `poi_anchor_estimates` needs it (see normalizePoiKey), and every caller
+ * already has it (required on both scrape-backed routes).
  */
 export async function getEstimatedAnchor(input: {
   placeId: string | null;
@@ -170,6 +192,7 @@ export async function getEstimatedAnchor(input: {
   const isDailyFootfall = DAILY_FOOTFALL_CATEGORIES.has(engineCategory);
   const mdCategoryLabel = resolution.profile.label;
 
+  // Tier 1: Database lookup (seeded data + previously-researched POIs)
   const candidateNames = [input.placeName, ...(input.alternateNames ?? [])];
   const existing = await getPoiAnchor(candidateNames, input.city, input.placeId);
   if (existing) {
@@ -183,34 +206,40 @@ export async function getEstimatedAnchor(input: {
     };
   }
 
+  // Tier 2: AI research (on-demand, with immediate save to DB)
   try {
     const firstPrompt = buildAnchorPrompt(input.placeName, mdCategoryLabel, input.city, isDailyFootfall);
     const firstRaw = await generateWithOpenAI(firstPrompt, input.city);
     let parsed = firstRaw.ok && firstRaw.text ? parseAnchorResponse(firstRaw.text) : null;
 
+    // If first pass returns null value, ask AI to commit to a number (even if uncertain)
     if (!parsed || parsed.value === null) {
       const followUpPrompt = buildFollowUpPrompt(input.placeName, mdCategoryLabel, input.city, isDailyFootfall);
       const secondRaw = await generateWithOpenAI(followUpPrompt, input.city);
       parsed = secondRaw.ok && secondRaw.text ? parseAnchorResponse(secondRaw.text) : null;
     }
 
-    if (!parsed || parsed.value === null || parsed.value <= 0 || parsed.confidence < MIN_CONFIDENCE) {
-      return null;
+    // Save ANY result with value >= 100 and reasonable confidence (>= 0.15)
+    // Lower threshold ensures we capture researched data even if confidence is moderate.
+    // This prevents falling back to generic 100,000 defaults for unique POIs.
+    if (parsed && parsed.value !== null && parsed.value >= 100 && parsed.confidence >= 0.15) {
+      const value = Math.round(parsed.value);
+      await saveAiRuntimeAnchor({
+        placeName: input.placeName,
+        city: input.city,
+        placeId: input.placeId,
+        mdCategory: mdCategoryLabel,
+        anchorMetricType: isDailyFootfall ? "average_daily_footfall" : "peak_simultaneous_capacity",
+        value,
+        confidence: parsed.confidence,
+        caveats: parsed.caveats,
+      });
+
+      return { value, confidence: parsed.confidence, caveats: parsed.caveats, origin: "ai_estimated" };
     }
 
-    const value = Math.round(parsed.value);
-    await saveAiRuntimeAnchor({
-      placeName: input.placeName,
-      city: input.city,
-      placeId: input.placeId,
-      mdCategory: mdCategoryLabel,
-      anchorMetricType: isDailyFootfall ? "average_daily_footfall" : "peak_simultaneous_capacity",
-      value,
-      confidence: parsed.confidence,
-      caveats: parsed.caveats,
-    });
-
-    return { value, confidence: parsed.confidence, caveats: parsed.caveats, origin: "ai_estimated" };
+    // If AI confidence is too low (< 0.15) or value invalid, return null to allow category fallback
+    return null;
   } catch (err) {
     console.error("[anchorEstimate] Failed:", err);
     return null;
