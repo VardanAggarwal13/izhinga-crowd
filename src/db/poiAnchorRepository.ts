@@ -1,5 +1,6 @@
 import { Collection } from "mongodb";
 import { getDb } from "./mongo";
+import { lookupCachedAnchor, setCachedAnchor } from "../scraper/cache";
 
 /**
  * Persistent, POI-specific anchor values (see DOCUMENTATION.md §13 and
@@ -85,11 +86,29 @@ export async function getPoiAnchor(
   placeId: string | null
 ): Promise<PoiAnchorDoc | null> {
   try {
+    // Tier 1: Check cache by place_id (fastest, ~1ms)
+    if (placeId) {
+      const cached = lookupCachedAnchor(placeId);
+      if (cached) return cached as PoiAnchorDoc;
+    }
+
+    // Tier 2: Check cache by normalized_key (~1ms)
+    for (const name of candidateNames) {
+      const key = normalizePoiKey(name, city);
+      const cached = lookupCachedAnchor(key);
+      if (cached) return cached as PoiAnchorDoc;
+    }
+
+    // Tier 3: Not in cache — query database (~1-5ms with indices)
     const collection = await getCollection();
 
     if (placeId) {
       const byPlaceId = await collection.findOne({ place_id: placeId });
-      if (byPlaceId) return byPlaceId;
+      if (byPlaceId) {
+        // Cache by place_id for future lookups
+        setCachedAnchor(placeId, byPlaceId);
+        return byPlaceId;
+      }
     }
 
     for (const name of candidateNames) {
@@ -97,11 +116,15 @@ export async function getPoiAnchor(
       const byKey = await collection.findOne({ normalized_key: key });
       if (!byKey) continue;
 
-      // Found by name+city but not yet linked to this place_id — link it
-      // now so the next lookup for this exact POI can skip straight to
-      // place_id.
+      // Cache by normalized_key for future lookups
+      setCachedAnchor(key, byKey);
       if (placeId && !byKey.place_id) {
+        // Also cache by place_id for next time, and link in DB
+        setCachedAnchor(placeId, byKey);
         await collection.updateOne({ normalized_key: key }, { $set: { place_id: placeId } }).catch(() => {});
+      } else if (byKey.place_id) {
+        // Cache by place_id too for fast future lookups
+        setCachedAnchor(byKey.place_id, byKey);
       }
       return byKey;
     }

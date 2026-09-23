@@ -249,8 +249,9 @@ export interface AiEstimatedWeek {
 // physical capacity — see ai/anchorEstimate.ts) its popularity trend can
 // genuinely shift over weeks, so this gets a real TTL rather than the
 // anchor's permanent DB persistence — a deliberate, explicit product
-// choice, not an oversight.
-const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+// choice, not an oversight. 6 hours matches the Google scrape cache TTL
+// for consistent freshness guarantees across both data sources.
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 interface CachedWeek {
   value: AiEstimatedWeek;

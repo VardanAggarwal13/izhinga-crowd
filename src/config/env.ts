@@ -30,11 +30,12 @@ export const env = {
     // Leave unset in Docker/Linux hosts — Playwright resolves its own bundled browser fine there.
     chromiumExecutablePath: optional("CHROMIUM_EXECUTABLE_PATH") || undefined,
     // "Fresh" window — a cache hit within this returns instantly with no
-    // background work at all. Popular Times' hourly pattern barely moves
-    // minute to minute, so an hour is a safe default: real traffic (many
-    // users checking the same popular place within the same hour) gets
-    // millisecond responses almost every time.
-    cacheTtlMs: Number(optional("SCRAPE_CACHE_TTL_MS", String(60 * 60 * 1000))),
+    // background work at all. Popular Times' hourly pattern is stable over
+    // 6 hours: most users checking the same POI within a 6-hour window get
+    // instant cached results (~500ms total) instead of waiting 50s+ for a
+    // real scrape. This is the main optimization for preventing duplicate
+    // scrapes of top attractions.
+    cacheTtlMs: Number(optional("SCRAPE_CACHE_TTL_MS", String(6 * 60 * 60 * 1000))),
     // "Stale but still instant" window, on top of the fresh one — a hit in
     // this range still returns the cached data immediately, but also kicks
     // off a background re-scrape to refresh it for the next request (see

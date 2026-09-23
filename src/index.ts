@@ -1,5 +1,6 @@
 import { createServer } from "./api/server";
 import { assertAiKeysConfigured, env } from "./config/env";
+import { ensureIndices } from "./db/mongo";
 
 // Belt-and-suspenders: every async route is already wrapped (see
 // asyncHandler.ts) so a route's own errors become clean 500s. This is the
@@ -35,8 +36,11 @@ if (missingConfig.length > 0) {
 
 const app = createServer();
 
-app.listen(env.port, () => {
+app.listen(env.port, async () => {
   const ai = assertAiKeysConfigured();
   console.log(`iZhinga Crowd API listening on port ${env.port}`);
   console.log(`AI providers configured — OpenAI: ${ai.openai}, Gemini: ${ai.gemini}`);
+
+  // Initialize database indices for optimized query performance
+  await ensureIndices();
 });
