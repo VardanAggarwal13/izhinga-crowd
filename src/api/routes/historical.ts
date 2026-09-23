@@ -15,12 +15,14 @@ historicalRouter.post(
 
     if (!result.consensus) {
       res.status(502).json({
-        error: "Both AI providers failed to produce an analysis",
-        sources: result.sources,
+        ok: false,
+        error: "unable_to_analyze",
+        message: "Unable to generate historical analysis for this location at this time. Please try again later.",
       });
       return;
     }
 
-    res.json(result);
+    // Clean response: only return consensus analysis, hide vendor/source details
+    res.json(result.consensus);
   })
 );

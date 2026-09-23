@@ -22,8 +22,9 @@ scrapeRouter.post(
       res.json(data);
     } catch (err) {
       res.status(502).json({
-        error: "Failed to scrape Google Maps for this request",
-        detail: err instanceof Error ? err.message : String(err),
+        ok: false,
+        error: "unable_to_fetch_data",
+        message: "Unable to fetch data for this location at this time. Please try again later.",
       });
     }
   })

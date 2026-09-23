@@ -351,8 +351,8 @@ export function buildCrowdIntelligence(
     time_slots: selectedHrs.map((h) => ({
       time: formatHour24(h.hour),
       crowd_level: levelFor(h.estimate),
-      crowd_score: h.percentage,
-      visitor_count: Math.round(h.estimate),
+      crowd_score: h.percentage, // Busyness percentage (0-100) — user-facing metric
+      visitor_count: h.estimate, // Expected visitor count at this time — user-facing metric
     })),
   };
 

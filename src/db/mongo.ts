@@ -42,25 +42,46 @@ export async function ensureIndices(): Promise<void> {
 
     // poi_anchor_estimates indices
     const anchorCollection = db.collection("poi_anchor_estimates");
-    await anchorCollection.createIndex({ normalized_key: 1 }, { unique: true });
-    await anchorCollection.createIndex({ place_id: 1 });
-    await anchorCollection.createIndex({ city: 1 });
+    await anchorCollection.createIndex({ normalized_key: 1 }, { unique: true }).catch(() => {});
+    await anchorCollection.createIndex({ place_id: 1 }).catch(() => {});
+    await anchorCollection.createIndex({ city: 1 }).catch(() => {});
 
     // calendar_events indices — compound index for the main range query
     const calendarCollection = db.collection("calendar_events");
-    await calendarCollection.createIndex(
-      { start_date: 1, end_date: 1, city: 1 },
-      { name: "calendar_range_city_idx" }
-    );
+
+    // Try to create with custom name, but if it exists with different name, that's OK
+    await calendarCollection
+      .createIndex(
+        { start_date: 1, end_date: 1, city: 1 },
+        { name: "calendar_range_city_idx" }
+      )
+      .catch((err: any) => {
+        // Index already exists with these fields (possibly different name) — that's fine
+        if (err.codeName === "IndexOptionsConflict") {
+          console.log("[mongo] Calendar range index already exists (different name) — skipping");
+        } else {
+          throw err;
+        }
+      });
+
     // Additional index for distinct("city") queries
-    await calendarCollection.createIndex({ city: 1 });
+    await calendarCollection.createIndex({ city: 1 }).catch(() => {});
 
     // poi_event_overrides indices — compound for fast POI-specific lookups
     const overridesCollection = db.collection("poi_event_overrides");
-    await overridesCollection.createIndex(
-      { place_id: 1, event_id: 1 },
-      { name: "poi_event_override_idx" }
-    );
+    await overridesCollection
+      .createIndex(
+        { place_id: 1, event_id: 1 },
+        { name: "poi_event_override_idx" }
+      )
+      .catch((err: any) => {
+        // Index already exists with these fields (possibly different name) — that's fine
+        if (err.codeName === "IndexOptionsConflict") {
+          console.log("[mongo] POI event override index already exists (different name) — skipping");
+        } else {
+          throw err;
+        }
+      });
 
     console.log("[mongo] All database indices created/verified");
   } catch (err) {

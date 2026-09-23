@@ -10,9 +10,9 @@ import { HistoricalAnalysisInput } from "./types";
  */
 export function buildHistoricalAnalysisPrompt(input: HistoricalAnalysisInput): string {
   const context = [
-    `POI name: ${input.placeName}`,
-    input.placeId ? `Place ID: ${input.placeId}` : null,
-    input.category ? `Category: ${input.category}` : null,
+    `POI name: ${input.poi_name}`,
+    input.place_id ? `Place ID: ${input.place_id}` : null,
+    input.md_category ? `Category: ${input.md_category}` : null,
     input.city ? `City: ${input.city}` : null,
   ]
     .filter(Boolean)

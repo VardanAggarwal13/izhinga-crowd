@@ -219,10 +219,10 @@ export async function getEstimatedAnchor(input: {
       parsed = secondRaw.ok && secondRaw.text ? parseAnchorResponse(secondRaw.text) : null;
     }
 
-    // Save ANY result with value >= 100 and reasonable confidence (>= 0.15)
-    // Lower threshold ensures we capture researched data even if confidence is moderate.
-    // This prevents falling back to generic 100,000 defaults for unique POIs.
-    if (parsed && parsed.value !== null && parsed.value >= 100 && parsed.confidence >= 0.15) {
+    // Save ANY result with value > 0 and minimum confidence (>= 0.1)
+    // Even small values (e.g. 25 for a street vendor) are better than generic 100,000 defaults.
+    // Confidence >= 0.1 ensures AI committed to an estimate (not just guessing).
+    if (parsed && parsed.value !== null && parsed.value > 0 && parsed.confidence >= 0.1) {
       const value = Math.round(parsed.value);
       await saveAiRuntimeAnchor({
         placeName: input.placeName,
@@ -238,7 +238,7 @@ export async function getEstimatedAnchor(input: {
       return { value, confidence: parsed.confidence, caveats: parsed.caveats, origin: "ai_estimated" };
     }
 
-    // If AI confidence is too low (< 0.15) or value invalid, return null to allow category fallback
+    // If AI confidence is too low (< 0.1) or value invalid (0 or null), return null to allow category fallback
     return null;
   } catch (err) {
     console.error("[anchorEstimate] Failed:", err);

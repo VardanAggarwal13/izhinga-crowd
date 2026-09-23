@@ -135,8 +135,6 @@ crowdRouter.post(
     const dayOfWeek = body.dayOfWeek ?? autoDetectDayOfWeek();
 
     let score = scraped.liveScore ?? undefined;
-    // providersUsed left out — same reasoning as crowdIntelligence.ts's data_source.
-    let aiFallback: { confidence: number; caveats: string[] } | null = null;
 
     if (score === undefined && needsScore(body.mdCategory, body.manual)) {
       const estimate = await estimateCrowdPatternWithAi({
@@ -147,10 +145,6 @@ crowdRouter.post(
       });
       if (estimate) {
         score = averageOpenHoursScore(estimate.popularTimesByDay[dayOfWeek]);
-        aiFallback = {
-          confidence: estimate.confidence,
-          caveats: estimate.caveats,
-        };
       }
     }
 
@@ -191,11 +185,11 @@ crowdRouter.post(
       return;
     }
 
-    const { formulaUsed: _formulaUsed, ...estimateForResponse } = outcome;
+    // Filter response to only expose user-facing data
+    // Hide all internal implementation details (formula, multipliers, anchor, score, estimates, ranges, etc)
     res.json({
-      scraped,
-      estimate: estimateForResponse,
-      data_source: aiFallback ? { type: "ai_estimated", ...aiFallback } : { type: "google_scrape" },
+      level: outcome.level,
+      levelLabel: outcome.levelLabel,
     });
   })
 );

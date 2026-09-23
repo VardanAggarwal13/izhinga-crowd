@@ -1,9 +1,9 @@
 export type CrowdLevelWord = "low" | "moderate" | "high" | "very_high";
 
 export interface HistoricalAnalysisInput {
-  placeName: string;
-  placeId?: string;
-  category?: string;
+  poi_name: string;
+  place_id?: string;
+  md_category?: string;
   city?: string;
 }
 
@@ -35,8 +35,8 @@ export interface MergedListField {
 }
 
 export interface HistoricalAnalysisResult {
-  placeName: string;
-  placeId: string | null;
+  poi_name: string;
+  place_id: string | null;
   sources: {
     openai: ProviderOutcome;
     gemini: ProviderOutcome;

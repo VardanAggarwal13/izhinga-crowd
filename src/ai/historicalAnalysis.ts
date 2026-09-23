@@ -160,8 +160,8 @@ export async function getHistoricalAnalysis(
   const gemini = toOutcome("gemini", geminiRaw);
 
   return {
-    placeName: input.placeName,
-    placeId: input.placeId ?? null,
+    poi_name: input.poi_name,
+    place_id: input.place_id ?? null,
     sources: { openai, gemini },
     singleSource: openai.ok !== gemini.ok,
     consensus: reconcile(openai, gemini),

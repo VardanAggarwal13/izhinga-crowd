@@ -117,9 +117,9 @@ export const crowdIntelligenceRequestSchema = z
   });
 
 export const historicalRequestSchema = z.object({
-  placeName: z.string().min(2),
-  placeId: z.string().optional(),
-  category: z.string().optional(),
+  poi_name: z.string().min(2),
+  place_id: z.string().optional(),
+  md_category: z.string().optional(),
   city: z.string().optional(),
 });
 

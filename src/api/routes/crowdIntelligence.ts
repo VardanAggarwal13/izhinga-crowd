@@ -84,18 +84,17 @@ crowdIntelligenceRouter.post(
     //      the exact same isEmptyWeek() AI-fallback branch already used for
     //      "Google resolved the place but had no Popular Times data".
     let scraped;
-    let scrapeErr: unknown;
     try {
       scraped = body.place_id ? await scrapePoiByPlaceId(body.place_id) : await scrapePoi(`${body.poi_name}, ${body.city}`);
     } catch (err) {
-      scrapeErr = err;
+      // Silently continue to fallback
     }
 
     if (!scraped && body.place_id && body.poi_name) {
       try {
         scraped = await scrapePoi(`${body.poi_name}, ${body.city}`);
       } catch (err) {
-        scrapeErr = err;
+        // Silently continue to fallback
       }
     }
 
@@ -105,10 +104,9 @@ crowdIntelligenceRouter.post(
       // `place_id` alone gives the AI no human-readable name to research.
       if (!body.poi_name) {
         res.status(502).json({
-          error: "scrape_failed",
-          message:
-            "Failed to scrape Google Maps for this place_id, and there's no poi_name to fall back to an AI estimate with (an unresolved place_id alone gives the AI nothing to research). Retry with poi_name + city instead, or verify the place_id.",
-          detail: scrapeErr instanceof Error ? scrapeErr.message : String(scrapeErr),
+          ok: false,
+          error: "unable_to_resolve_location",
+          message: "Unable to resolve this location. Please provide poi_name with city for a new search.",
         });
         return;
       }
@@ -159,14 +157,20 @@ crowdIntelligenceRouter.post(
 
     let popularTimesByDay = scraped.popularTimesByDay;
     let score = body.score ?? scraped.liveScore ?? undefined;
-    // providersUsed (which AI vendors were queried internally) deliberately
-    // left out of this externally-sold response — internal implementation
-    // detail, not something a paying API consumer needs.
-    let dataSource: { type: "google_scrape" } | { type: "ai_estimated"; confidence: number; caveats: string[] } = {
-      type: "google_scrape",
-    };
 
-    if (isEmptyWeek(popularTimesByDay)) {
+    // ─────────────────────────────────────────────────────────────────────────
+    // OPTIMIZED PARALLELIZATION STRATEGY
+    // ─────────────────────────────────────────────────────────────────────────
+    // Priority 1: Crowd pattern AI (if needed) — gets this first
+    // Priority 2: Anchor + Calendar + Weather (parallelized)
+    // This avoids concurrent OpenAI calls when both need AI
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Step 1: Check if crowd pattern needs AI
+    const crowdPatternNeedsAi = isEmptyWeek(popularTimesByDay);
+
+    // Step 2: If crowd pattern needs AI, get it FIRST (priority)
+    if (crowdPatternNeedsAi) {
       const aiEstimate = await estimateCrowdPatternWithAi({
         placeName: reliablePlaceName,
         category: body.md_category,
@@ -181,31 +185,32 @@ crowdIntelligenceRouter.post(
 
       if (!aiEstimate) {
         res.status(502).json({
-          error: "no_data_available",
-          message:
-            "Google Maps has no Popular Times data for this place, and the AI fallback also failed (check OPENAI_API_KEY/GEMINI_API_KEY are configured and funded).",
-          scraped,
+          ok: false,
+          error: "unable_to_analyze",
+          message: "Unable to analyze crowd patterns for this location at this time. Please try again later.",
         });
         return;
       }
 
       popularTimesByDay = aiEstimate.popularTimesByDay;
       score = score ?? averageOpenHoursScore(popularTimesByDay[dayOfWeek]);
-      dataSource = {
-        type: "ai_estimated",
-        confidence: aiEstimate.confidence,
-        caveats: aiEstimate.caveats,
-      };
     }
 
+    // Step 3: After crowd pattern, parallelize metadata + anchor
+    // All three are independent DB/API queries, no dependencies on each other
     // Explicit caller input always wins — this only fills in what's missing
     // (see DOCUMENTATION.md on the festival/event calendar).
-    const todayOverrides = await getTodayCalendarOverrides(body.city, reliablePlaceId);
-    const autoWeather = body.weather ? undefined : await getAutoWeather(scraped.lat, scraped.lng);
-    const aiEstimatedAnchor =
+    const [todayOverrides, autoWeather, aiEstimatedAnchor] = await Promise.all([
+      // Calendar: DB lookup by (city, place_id)
+      getTodayCalendarOverrides(body.city, reliablePlaceId),
+
+      // Weather: API call by (lat, lng) — safe if either is null (returns undefined)
+      body.weather ? Promise.resolve(undefined) : getAutoWeather(scraped.lat, scraped.lng),
+
+      // Anchor: DB lookup or AI estimation (based on availability)
       body.anchor_override !== undefined
-        ? undefined
-        : (await getEstimatedAnchor({
+        ? Promise.resolve(undefined)
+        : getEstimatedAnchor({
             placeId: reliablePlaceId,
             mdCategoryRaw: body.md_category,
             placeName: reliablePlaceName,
@@ -215,7 +220,8 @@ crowdIntelligenceRouter.post(
             // the caller's own original search term too.
             alternateNames: body.poi_name ? [body.poi_name] : undefined,
             city: body.city,
-          })) ?? undefined;
+          }).then((result) => result ?? undefined),
+    ]);
 
     const outcome = buildCrowdIntelligence(body.md_category, popularTimesByDay, {
       dayOfWeek,
@@ -237,30 +243,10 @@ crowdIntelligenceRouter.post(
       return;
     }
 
-    // `formula` (the internal Livecrowd.md math as a string) deliberately
-    // left out of this externally-sold response — see DOCUMENTATION.md
-    // internally if you need it, not something a paying API consumer needs.
-    const { formula: _formula, ...calculationForResponse } = outcome.calculation;
-
+    // Clean response: only return crowd_intelligence data
+    // Internal details (calculation, formula, place info) are not needed by API consumers
     res.json({
       crowd_intelligence: outcome.crowd_intelligence,
-      calculation: calculationForResponse,
-      place: {
-        // reliablePlaceId/reliablePlaceName, not the raw scraped.* — when
-        // the real scrape(s) landed on an unreliable match (see
-        // isUnreliableMatch above), scraped.placeId/placeName point at the
-        // WRONG entity (e.g. the city itself); echoing those back would
-        // misrepresent what was actually found. In that case this honestly
-        // reflects the caller's own poi_name and a null place_id rather than
-        // a confident-looking but wrong resolved place.
-        place_id: reliablePlaceId,
-        name: reliablePlaceName,
-        category: scraped.category,
-        address: scraped.address,
-        live_status_text: scraped.liveStatusText,
-        live_score: scraped.liveScore,
-        data_source: dataSource,
-      },
     });
   })
 );
